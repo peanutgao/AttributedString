@@ -346,22 +346,52 @@ fileprivate extension UILabel {
         // 确保布局
         layoutManager.ensureLayout(for: textContainer)
 
-        // 获取文本所占高度
-        let height = layoutManager.usedRect(for: textContainer).height
+        // 获取文本所占用区域
+        let usedRect = layoutManager.usedRect(for: textContainer)
+
+        // 计算水平/垂直偏移，将触点从 label 坐标映射到 TextKit 容器坐标
+        // 水平偏移：考虑 textAlignment 以及 RTL
+        var xOffset: CGFloat = 0
+        switch textAlignment {
+        case .center:
+            xOffset = (bounds.width - usedRect.width) / 2.0
+        case .right:
+            xOffset = bounds.width - usedRect.width
+        case .natural:
+            if effectiveUserInterfaceLayoutDirection == .rightToLeft {
+                xOffset = bounds.width - usedRect.width
+            }
+        default:
+            xOffset = 0
+        }
+        // 垂直偏移：UILabel 多行时顶部对齐，单行时通常居中显示
+        let isSingleLine = (numberOfLines == 1)
+        let yOffset: CGFloat = isSingleLine ? (bounds.height - usedRect.height) / 2.0 : 0
 
         // 获取点击坐标 并排除各种偏移
         var point = point
-        point.y -= (bounds.height - height) / 2
+        point.x -= xOffset
+        point.y -= yOffset
 
         // Debug
 //        subviews.filter({ $0 is DebugView }).forEach({ $0.removeFromSuperview() })
-//        let view = DebugView(frame: .init(x: 0, y: (bounds.height - height) / 2, width: bounds.width, height: height))
-//        view.draw = { layoutManager.drawGlyphs(forGlyphRange: .init(location: 0, length: textStorage.length), at: .zero) }
+//        let view = DebugView(frame: .init(x: 0, y: (bounds.height - height) / 2,
+//                                          width: bounds.width, height: height))
+//        view.draw = {
+//            layoutManager.drawGlyphs(
+//                forGlyphRange: .init(location: 0, length: textStorage.length),
+//                at: .zero
+//            )
+//        }
 //        addSubview(view)
 
         // 获取字形下标
         var fraction: CGFloat = 0
-        let glyphIndex = layoutManager.glyphIndex(for: point, in: textContainer, fractionOfDistanceThroughGlyph: &fraction)
+        let glyphIndex = layoutManager.glyphIndex(
+            for: point,
+            in: textContainer,
+            fractionOfDistanceThroughGlyph: &fraction
+        )
         // 获取字符下标
         let index = layoutManager.characterIndexForGlyph(at: glyphIndex)
         // 通过字形距离判断是否在字形范围内
@@ -387,7 +417,7 @@ class DebugView: UIView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+        fatalError("init(coder:) not implemented")
     }
 
     override func draw(_ rect: CGRect) {
@@ -407,7 +437,8 @@ private extension String {
 extension UILabel {
     // Runtime Headers
     // https://github.com/nst/iOS-Runtime-Headers/blob/master/PrivateFrameworks/UIKitCore.framework/UILabel.h
-    // https://github.com/nst/iOS-Runtime-Headers/blob/fbb634c78269b0169efdead80955ba64eaaa2f21/PrivateFrameworks/UIKitCore.framework/_UILabelScaledMetrics.h
+    // https://github.com/nst/iOS-Runtime-Headers/blob/fbb634c78269b0169efdead80955ba64eaaa2f21
+    // /PrivateFrameworks/UIKitCore.framework/_UILabelScaledMetrics.h
 
     struct ScaledMetrics {
         let actualScaleFactor: Double
@@ -499,7 +530,7 @@ extension UILabel {
             .paragraphStyle,
             in: .init(location: 0, length: mutable.length),
             options: .longestEffectiveRangeNotRequired
-        ) { (value, range, stop) in
+        ) { (value, range, _) in
             guard let old = value as? NSParagraphStyle else { return }
             guard let new = old.mutableCopy() as? NSMutableParagraphStyle else { return }
             new.lineBreakMode = numberOfLines == 1 ? .byCharWrapping : .byWordWrapping
